@@ -1,0 +1,7 @@
+[submodule "src/u-boot"]
+	path = src/u-boot
+	url = https://github.com/Kwiboo/u-boot-rockchip.git
+	branch = rk3528-2025.04-wip
+[submodule "src/rkbin"]
+	path = src/rkbin
+	url = https://github.com/rockchip-linux/rkbin.git

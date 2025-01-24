@@ -1,0 +1,5 @@
+u-boot-kwiboo (2025.04-1) jammy; urgency=medium
+
+  * Add initial Debian packaging support
+
+ -- "Radxa Computer Co., Ltd" <dev@radxa.com>  Fri, 24 Jan 2025 02:30:30 +0000

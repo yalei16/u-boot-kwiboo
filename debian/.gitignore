@@ -1,0 +1,8 @@
+/.debhelper
+/debhelper-build-stamp
+/files
+/u-boot-*/
+/*.debhelper.log
+/*.postrm.debhelper
+/*.substvars
+/tmp

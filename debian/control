@@ -1,0 +1,26 @@
+Source: u-boot-kwiboo
+Maintainer: "Radxa Computer Co., Ltd" <dev@radxa.com>
+Section: admin
+Priority: standard
+Standards-Version: 4.6.0
+Build-Depends: debhelper (>=12~),
+               devscripts,
+               lintian,
+               dh-exec,
+               flex,
+               bison,
+               python3-setuptools,
+               swig,
+               python3-dev,
+               libgnutls28-dev,
+               python3-pyelftools,
+               libncurses-dev,
+               crossbuild-essential-arm64 [!arm64],
+
+Package: u-boot-kwiboo
+Architecture: all
+Section: admin
+Priority: optional
+Depends: ${misc:Depends},
+Description: Experimental U-Boot based on Kwiboo's fork
+ This package provides the prebuilt U-Boot based on Kwiboo's fork.
