@@ -2,19 +2,6 @@ name: Build U-Boot for K20 Pro Dual Boot
 
 on:
   workflow_dispatch:
-    inputs:
-      uboot_repo:
-        description: 'U-Boot仓库地址'
-        required: true
-        default: 'https://github.com/Aospa-raphael-unofficial/u-boot.git'
-      uboot_branch:
-        description: 'U-Boot分支'
-        required: true
-        default: 'main'
-      defconfig:
-        description: 'defconfig名称'
-        required: true
-        default: 'raphael_defconfig'
 
 env:
   CROSS_COMPILE: aarch64-linux-gnu-
@@ -46,17 +33,13 @@ jobs:
         echo "=== 查找raphael相关配置 ==="
         ls configs/ | grep -i raphael || true
         ls configs/ | grep -i sm8150 || true
-        echo "=== 前20个ARM64配置 ==="
+        echo "=== 前20个配置 ==="
         ls configs/*_defconfig 2>/dev/null | head -20 || true
           
     - name: 配置U-Boot
       working-directory: u-boot
       run: |
-        DEFCONFIG="${{ github.event.inputs.defconfig }}"
-        
-        if [ -f "configs/${DEFCONFIG}" ]; then
-          make ${DEFCONFIG}
-        elif [ -f "configs/raphael_defconfig" ]; then
+        if [ -f "configs/raphael_defconfig" ]; then
           make raphael_defconfig
         elif [ -f "configs/sm8150_defconfig" ]; then
           make sm8150_defconfig
