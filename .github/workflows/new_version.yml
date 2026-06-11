@@ -170,4 +170,75 @@ jobs:
         cp u-boot/u-boot.bin release/
         cp u-boot/u-boot-nodtb.bin release/ 2>/dev/null || true
         cp u-boot/u-boot.dtb release/ 2>/dev/null || true
-        cp u-boot/
+        cp u-boot/spl/u-boot-spl.bin release/ 2>/dev/null || true
+        
+        # 复制双系统配置文件
+        cp -r dual-boot/extlinux release/
+        
+        # 生成刷机说明
+        cat > release/FLASH_GUIDE.md << 'EOF'
+        # K20 Pro U-Boot 双系统刷入指南
+        
+        ## 文件说明
+        - `u-boot.bin` - U-Boot 主程序
+        - `extlinux/extlinux.conf` - 双系统启动菜单配置
+        
+        ## 刷入方法
+        
+        ### 方法1: 通过 fastboot 刷入 boot 分区
+        ```bash
+        fastboot flash boot u-boot.bin
+        ```
+        
+        ### 方法2: 替换现有 U-Boot
+        如果你的系统已经使用 U-Boot 引导，直接替换 u-boot.bin 即可。
+        
+        ## 启动菜单使用
+        1. 开机时按住 **音量减** 键进入 U-Boot 菜单
+        2. 使用 **音量加减** 选择系统
+        3. 按 **电源键** 确认启动
+        
+        ## extlinux.conf 放置位置
+        将 `extlinux.conf` 放到启动分区的以下路径之一：
+        - `/extlinux/extlinux.conf`
+        - `/boot/extlinux/extlinux.conf`
+        
+        ## 自定义启动项
+        编辑 `extlinux.conf` 修改：
+        - `root=/dev/sda31` → Ubuntu 根分区
+        - `root=/dev/sda32` → Kali 根分区
+        - `FDT` → 设备树文件路径
+        - `INITRD` → initramfs 路径
+        EOF
+        
+        echo "=== 打包完成 ==="
+        ls -la release/
+        
+    # ========== 8. 上传构建产物 ==========
+    - name: Upload U-Boot artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: u-boot-k20pro-dualboot
+        path: |
+          release/
+        if-no-files-found: error
+        
+    # ========== 9. 发布到 Release（打标签时自动发布） ==========
+    - name: Upload to Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          release/u-boot.bin
+          release/extlinux/extlinux.conf
+          release/FLASH_GUIDE.md
+        body: |
+          K20 Pro (raphael) U-Boot 双系统引导镜像
+          
+          支持：
+          - sda31 引导 Ubuntu
+          - sda32 引导 Kali Linux
+          - 启动菜单按键选择
+          - 恢复模式
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
