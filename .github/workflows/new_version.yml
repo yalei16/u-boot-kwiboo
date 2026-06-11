@@ -31,7 +31,7 @@ jobs:
         repository: Aospa-raphael-unofficial/u-boot
         ref: ${{ github.event.inputs.uboot_branch }}
         path: u-boot
-        
+        submodules:false
     - name: 安装编译工具
       run: |
         sudo apt-get update
