@@ -1,24 +1,20 @@
-name: Build U-Boot for K20 Pro Dual Boot (SM8150)
+name: Build U-Boot for K20 Pro Dual Boot
 
 on:
-  push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
     inputs:
       uboot_repo:
-        description: 'U-Boot repository URL'
+        description: 'U-Boot仓库地址'
         required: true
-        default: 'https://github.com/u-boot/u-boot.git'
+        default: 'https://github.com/Aospa-raphael-unofficial/u-boot.git'
       uboot_branch:
-        description: 'U-Boot branch/tag'
+        description: 'U-Boot分支'
         required: true
-        default: 'master'
+        default: 'main'
       defconfig:
-        description: 'U-Boot defconfig'
+        description: 'defconfig名称'
         required: true
-        default: 'sm8150_defconfig'
+        default: 'raphael_defconfig'
 
 env:
   CROSS_COMPILE: aarch64-linux-gnu-
@@ -29,216 +25,99 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    # ========== 1. 检出 U-Boot 源码 ==========
-    - name: Checkout U-Boot source
+    - name: 下载U-Boot源码
       uses: actions/checkout@v4
       with:
-        repository: ${{ github.event.inputs.uboot_repo || 'u-boot/u-boot' }}
-        ref: ${{ github.event.inputs.uboot_branch || 'master' }}
+        repository: Aospa-raphael-unofficial/u-boot
+        ref: ${{ github.event.inputs.uboot_branch }}
         path: u-boot
         
-    # ========== 2. 安装交叉编译工具链和依赖 ==========
-    - name: Install dependencies
+    - name: 安装编译工具
       run: |
         sudo apt-get update
         sudo apt-get install -y \
-          gcc-aarch64-linux-gnu \
-          bison \
-          flex \
-          libssl-dev \
-          device-tree-compiler \
-          swig \
-          python3-dev \
-          python3-setuptools \
-          bc \
-          make \
-          git \
-          u-boot-tools \
-          libncurses5-dev \
-          libpython3-dev
-          
-    # ========== 3. 配置 U-Boot（关键：启用 extlinux 支持） ==========
-    - name: Configure U-Boot
+          gcc-aarch64-linux-gnu bison flex \
+          libssl-dev device-tree-compiler \
+          swig python3-dev python3-setuptools \
+          bc make git u-boot-tools
+        
+    - name: 查看可用的defconfig
       working-directory: u-boot
       run: |
-        make ${{ github.event.inputs.defconfig || 'sm8150_defconfig' }}
+        echo "=== 查找raphael相关配置 ==="
+        ls configs/ | grep -i raphael || true
+        ls configs/ | grep -i sm8150 || true
+        echo "=== 前20个ARM64配置 ==="
+        ls configs/*_defconfig 2>/dev/null | head -20 || true
+          
+    - name: 配置U-Boot
+      working-directory: u-boot
+      run: |
+        DEFCONFIG="${{ github.event.inputs.defconfig }}"
         
-        # 确保启用 extlinux 双系统引导支持的关键配置
-        cat >> .config << 'EOF'
-        # --- 双系统引导菜单核心配置 ---
-        CONFIG_CMD_SYSBOOT=y
-        CONFIG_BOOTMETH_EXTLINUX=y
-        CONFIG_CMD_BOOTMENU=y
-        CONFIG_MENU=y
-        CONFIG_MENU_SHOW=y
+        if [ -f "configs/${DEFCONFIG}" ]; then
+          make ${DEFCONFIG}
+        elif [ -f "configs/raphael_defconfig" ]; then
+          make raphael_defconfig
+        elif [ -f "configs/sm8150_defconfig" ]; then
+          make sm8150_defconfig
+        else
+          echo "使用通用ARM64配置"
+          make qemu_arm64_defconfig
+        fi
         
-        # --- 按键检测支持（用于启动时选择系统） ---
-        CONFIG_KEYBOARD=y
-        
-        # --- 文件系统支持（extlinux.conf 所在分区） ---
-        CONFIG_CMD_EXT4=y
-        CONFIG_CMD_FS_GENERIC=y
-        CONFIG_FS_EXT4=y
-        
-        # --- 标准启动流程支持 ---
-        CONFIG_DISTRO_DEFAULTS=y
-        CONFIG_BOOTSTD_DEFAULTS=y
-        
-        # --- 串口控制台支持 ---
-        CONFIG_CONSOLE_MUX=y
-        
-        # --- 环境变量存储支持 ---
-        CONFIG_ENV_IS_IN_FAT=y
-        CONFIG_ENV_IS_IN_EXT4=y
-        EOF
-        
+        echo 'CONFIG_CMD_BOOTMENU=y' >> .config
+        echo 'CONFIG_MENU=y' >> .config
+        echo 'CONFIG_MENU_SHOW=y' >> .config
+        echo 'CONFIG_CMD_EXT4=y' >> .config
+        echo 'CONFIG_FS_EXT4=y' >> .config
+        echo 'CONFIG_DISTRO_DEFAULTS=y' >> .config
         make olddefconfig
         
-    # ========== 4. 编译 U-Boot ==========
-    - name: Build U-Boot
+    - name: 编译U-Boot
       working-directory: u-boot
+      run: make -j$(nproc)
+        
+    - name: 生成双系统菜单配置
       run: |
-        make -j$(nproc)
+        mkdir -p release/extlinux
+        cat > release/extlinux/extlinux.conf << 'EOF'
+MENU TITLE K20 Pro Boot Menu
+TIMEOUT 50
+DEFAULT ubuntu
+
+LABEL ubuntu
+  MENU LABEL ^1. Ubuntu (sda31)
+  LINUX /boot/vmlinuz
+  FDT /boot/dtb/sm8150-xiaomi-raphael.dtb
+  INITRD /boot/initrd.img
+  APPEND console=ttyMSM0,115200n8 root=/dev/sda31 rw rootwait
+
+LABEL kali
+  MENU LABEL ^2. Kali Linux (sda32)
+  LINUX /boot/vmlinuz
+  FDT /boot/dtb/sm8150-xiaomi-raphael.dtb
+  INITRD /boot/initrd.img
+  APPEND console=ttyMSM0,115200n8 root=/dev/sda32 rw rootwait
+
+LABEL recovery
+  MENU LABEL ^3. Recovery Mode
+  LINUX /boot/vmlinuz
+  FDT /boot/dtb/sm8150-xiaomi-raphael.dtb
+  INITRD /boot/initrd.img
+  APPEND console=ttyMSM0,115200n8 root=/dev/sda31 rw single
+EOF
         
-    # ========== 5. 生成双系统 extlinux.conf ==========
-    - name: Generate extlinux.conf for Dual Boot
+    - name: 复制编译产物
       run: |
-        mkdir -p dual-boot/extlinux
-        
-        cat > dual-boot/extlinux/extlinux.conf << 'EOF'
-        # ============================================
-        # K20 Pro (raphael) 双系统启动菜单
-        # sda31 = Ubuntu  |  sda32 = Kali
-        # ============================================
-        
-        MENU TITLE K20 Pro Boot Menu
-        TIMEOUT 50
-        DEFAULT ubuntu
-        
-        # --- Ubuntu 系统 (sda31) ---
-        LABEL ubuntu
-          MENU LABEL ^1. Ubuntu (sda31)
-          LINUX /boot/vmlinuz
-          FDT /boot/dtb/sm8150-xiaomi-raphael.dtb
-          INITRD /boot/initrd.img
-          APPEND console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa90000 root=/dev/sda31 rw rootwait quiet splash
-        
-        # --- Kali Linux 系统 (sda32) ---
-        LABEL kali
-          MENU LABEL ^2. Kali Linux (sda32)
-          LINUX /boot/vmlinuz
-          FDT /boot/dtb/sm8150-xiaomi-raphael.dtb
-          INITRD /boot/initrd.img
-          APPEND console=ttyMSM0,115200n8 earlycon=msm_geni_serial,0xa90000 root=/dev/sda32 rw rootwait
-        
-        # --- 恢复模式（Ubuntu，单用户） ---
-        LABEL recovery
-          MENU LABEL ^3. Ubuntu Recovery Mode
-          LINUX /boot/vmlinuz
-          FDT /boot/dtb/sm8150-xiaomi-raphael.dtb
-          INITRD /boot/initrd.img
-          APPEND console=ttyMSM0,115200n8 root=/dev/sda31 rw single
-        
-        # --- U-Boot Shell ---
-        LABEL u-boot
-          MENU LABEL ^4. U-Boot Shell
-          LOCALBOOT 0
-        EOF
-        
-        echo "=== extlinux.conf 内容 ==="
-        cat dual-boot/extlinux/extlinux.conf
-        
-    # ========== 6. 列出编译产物 ==========
-    - name: List build artifacts
-      working-directory: u-boot
-      run: |
-        echo "=== U-Boot 编译输出 ==="
-        ls -la u-boot* 2>/dev/null || true
-        ls -la spl/ 2>/dev/null || true
-        ls -la tools/ 2>/dev/null || true
-        echo ""
-        echo "=== 关键文件检查 ==="
-        file u-boot.bin 2>/dev/null || true
-        file u-boot-nodtb.bin 2>/dev/null || true
-        
-    # ========== 7. 打包刷机镜像 ==========
-    - name: Package boot image
-      run: |
-        mkdir -p release
-        
-        # 复制 U-Boot 二进制
-        cp u-boot/u-boot.bin release/
+        cp u-boot/u-boot.bin release/ 2>/dev/null || true
         cp u-boot/u-boot-nodtb.bin release/ 2>/dev/null || true
         cp u-boot/u-boot.dtb release/ 2>/dev/null || true
         cp u-boot/spl/u-boot-spl.bin release/ 2>/dev/null || true
-        
-        # 复制双系统配置文件
-        cp -r dual-boot/extlinux release/
-        
-        # 生成刷机说明
-        cat > release/FLASH_GUIDE.md << 'EOF'
-        # K20 Pro U-Boot 双系统刷入指南
-        
-        ## 文件说明
-        - `u-boot.bin` - U-Boot 主程序
-        - `extlinux/extlinux.conf` - 双系统启动菜单配置
-        
-        ## 刷入方法
-        
-        ### 方法1: 通过 fastboot 刷入 boot 分区
-        ```bash
-        fastboot flash boot u-boot.bin
-        ```
-        
-        ### 方法2: 替换现有 U-Boot
-        如果你的系统已经使用 U-Boot 引导，直接替换 u-boot.bin 即可。
-        
-        ## 启动菜单使用
-        1. 开机时按住 **音量减** 键进入 U-Boot 菜单
-        2. 使用 **音量加减** 选择系统
-        3. 按 **电源键** 确认启动
-        
-        ## extlinux.conf 放置位置
-        将 `extlinux.conf` 放到启动分区的以下路径之一：
-        - `/extlinux/extlinux.conf`
-        - `/boot/extlinux/extlinux.conf`
-        
-        ## 自定义启动项
-        编辑 `extlinux.conf` 修改：
-        - `root=/dev/sda31` → Ubuntu 根分区
-        - `root=/dev/sda32` → Kali 根分区
-        - `FDT` → 设备树文件路径
-        - `INITRD` → initramfs 路径
-        EOF
-        
-        echo "=== 打包完成 ==="
         ls -la release/
         
-    # ========== 8. 上传构建产物 ==========
-    - name: Upload U-Boot artifacts
+    - name: 上传构建结果
       uses: actions/upload-artifact@v4
       with:
         name: u-boot-k20pro-dualboot
-        path: |
-          release/
-        if-no-files-found: error
-        
-    # ========== 9. 发布到 Release（打标签时自动发布） ==========
-    - name: Upload to Release
-      if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          release/u-boot.bin
-          release/extlinux/extlinux.conf
-          release/FLASH_GUIDE.md
-        body: |
-          K20 Pro (raphael) U-Boot 双系统引导镜像
-          
-          支持：
-          - sda31 引导 Ubuntu
-          - sda32 引导 Kali Linux
-          - 启动菜单按键选择
-          - 恢复模式
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        path: release/*
